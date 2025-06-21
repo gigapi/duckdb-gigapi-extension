@@ -237,6 +237,10 @@ struct GigapiParseData : public ParserExtensionParseData {
 	unique_ptr<ParserExtensionParseData> Copy() const override {
 		return make_uniq<GigapiParseData>(statement->Copy());
 	}
+
+	string ToString() const override {
+		return statement->ToString();
+	}
 };
 
 ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
