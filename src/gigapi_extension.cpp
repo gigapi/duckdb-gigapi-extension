@@ -87,6 +87,19 @@ public:
 		return "*2\r\n$6\r\nEXISTS\r\n$" + std::to_string(key.length()) + "\r\n" + key + "\r\n";
 	}
 
+	static std::string formatZadd(const std::string& key, const std::string& score, const std::string& member) {
+		return "*4\r\n$4\r\nZADD\r\n$" +
+		    std::to_string(key.length()) + "\r\n" + key + "\r\n" +
+		    std::to_string(score.length()) + "\r\n" + score + "\r\n" +
+		    std::to_string(member.length()) + "\r\n" + member + "\r\n";
+	}
+
+	static std::string formatZrem(const std::string& key, const std::string& member) {
+		return "*3\r\n$4\r\nZREM\r\n$" +
+		    std::to_string(key.length()) + "\r\n" + key + "\r\n" +
+		    std::to_string(member.length()) + "\r\n" + member + "\r\n";
+	}
+
     static std::vector<std::string> parseArrayResponse(const std::string& response) {
         std::vector<std::string> result;
         if (response.empty() || response[0] != '*') return result;
@@ -349,6 +362,28 @@ struct GigapiParserExtension : public ParserExtension {
 	}
 };
 
+static void GigapiTestCreateEmptyIndexFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto &table_name_vector = args.data[0];
+	auto &context = state.GetContext();
+
+	UnaryExecutor::Execute<string_t, bool>(
+	    table_name_vector, result, args.size(), [&](string_t table_name) {
+		    string host, port, password;
+		    if (!GetRedisSecret(context, "gigapi", host, port, password)) {
+			    return false;
+		    }
+		    auto redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
+		    string redis_key = "giga:idx:ts:" + table_name.GetString();
+		    string dummy_member = "placeholder";
+
+		    // Add and immediately remove a member to ensure the key exists as an empty sorted set
+		    redis_conn->execute(RedisProtocol::formatZadd(redis_key, "0", dummy_member));
+		    redis_conn->execute(RedisProtocol::formatZrem(redis_key, dummy_member));
+
+		    return true;
+	    });
+}
+
 static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &sql_query_vector = args.data[0];
 	UnaryExecutor::Execute<string_t, string_t>(
@@ -398,6 +433,10 @@ static void LoadInternal(DatabaseInstance &instance) {
 	// Add the dry run function for testing
 	auto gigapi_dry_run_scalar = ScalarFunction("gigapi_dry_run", {LogicalType::VARCHAR}, LogicalType::VARCHAR, GigapiDryRunFunction);
 	ExtensionUtil::RegisterFunction(instance, gigapi_dry_run_scalar);
+
+	// Add a test-only function to create empty indexes in Redis
+	auto giga_test_create_empty_index_scalar = ScalarFunction("giga_test_create_empty_index", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, GigapiTestCreateEmptyIndexFunction);
+	ExtensionUtil::RegisterFunction(instance, giga_test_create_empty_index_scalar);
 }
 
 void GigapiExtension::Load(DuckDB &db) {

@@ -36,9 +36,14 @@ SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE
 statement ok
 CREATE SECRET gigapi (TYPE redis, HOST 'localhost', PORT '6379', PASSWORD '');
 
+# Use our test helper to create an empty index for our table in Redis
+query I
+SELECT giga_test_create_empty_index('my_indexed_table_with_no_files');
+----
+true
+
 # Now, query a table that should be hijacked.
-# Since the key 'giga:idx:ts:my_indexed_table_with_no_files' won't exist in Redis,
-# we expect a specific error message.
+# Since the key now EXISTS but is EMPTY, we expect the specific error message.
 statement error
 SELECT * FROM my_indexed_table_with_no_files;
 ----
