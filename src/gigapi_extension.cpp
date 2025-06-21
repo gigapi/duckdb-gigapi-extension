@@ -317,19 +317,15 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 		throw InvalidInputException("No files found in Redis for table '%s'", table_name);
 	}
 
-	// Format file list for read_parquet
-	string file_list_str = "[";
-	for (size_t i = 0; i < file_list_vec.size(); ++i) {
-		file_list_str += "'" + file_list_vec[i] + "'";
-		if (i < file_list_vec.size() - 1) {
-			file_list_str += ", ";
-		}
+	// Create a list value from the file list
+	vector<Value> file_values;
+	for (const auto &file_path : file_list_vec) {
+		file_values.emplace_back(file_path);
 	}
-	file_list_str += "]";
 	
 	// Create a new table reference for read_parquet
 	vector<unique_ptr<ParsedExpression>> children;
-	children.push_back(make_uniq<ConstantExpression>(Value(file_list_str)));
+	children.push_back(make_uniq<ConstantExpression>(Value::LIST(file_values)));
 
 	auto new_table_ref = make_uniq<TableFunctionRef>();
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
@@ -396,12 +392,14 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 			    throw InvalidInputException("Expected a FROM clause with a single table");
 		    }
 
-		    // For a dry run, we don't connect to Redis. We use a dummy file list.
-		    string file_list_str = "['dummy/file1.parquet', 'dummy/file2.parquet']";
+		    // For a dry run, we use a dummy file list.
+			vector<Value> dummy_files;
+			dummy_files.emplace_back("dummy/file1.parquet");
+			dummy_files.emplace_back("dummy/file2.parquet");
 
 		    // Create a new table reference for read_parquet
 			vector<unique_ptr<ParsedExpression>> children;
-			children.push_back(make_uniq<ConstantExpression>(Value(file_list_str)));
+			children.push_back(make_uniq<ConstantExpression>(Value::LIST(dummy_files)));
 
 			auto new_table_ref = make_uniq<TableFunctionRef>();
 			new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
