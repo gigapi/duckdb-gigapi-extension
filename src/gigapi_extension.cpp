@@ -23,6 +23,9 @@
 #include "gigapi_secret.hpp"
 #include "parse_where.hpp"
 
+#include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/planner.hpp"
+
 // Redis client includes
 #include <boost/asio.hpp>
 #include <string>
@@ -466,8 +469,14 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	// Let the default planner handle the rewritten statement
-	return ParserExtensionPlanResult();
+	// Now, we need to bind and plan the rewritten statement
+	auto binder = Binder::CreateBinder(context);
+	auto bound_statement = binder->Bind(*gigapi_parse_data.statement);
+	
+	LogicalPlanner planner(*binder, context);
+	auto logical_plan = planner.CreatePlan(*bound_statement);
+
+	return ParserExtensionPlanResult(std::move(logical_plan));
 }
 
 
