@@ -261,8 +261,15 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	auto &gigapi_parse_data = dynamic_cast<GigapiParseData &>(*parse_data);
 	auto &select_statement = dynamic_cast<SelectStatement &>(*gigapi_parse_data.statement);
 	auto &select_node = *dynamic_cast<SelectNode *>(select_statement.node.get());
+
+	// Check if we can handle this query: it must be a SELECT from a single base table
+	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
+		return ParserExtensionPlanResult();
+	}
+
 	auto &table_ref = dynamic_cast<BaseTableRef &>(*select_node.from_table);
-	auto table_name = table_ref.table_name;
+	string qualified_name =
+	    table_ref.schema_name.empty() ? table_ref.table_name : table_ref.schema_name + "." + table_ref.table_name;
 
 	// Get Redis connection details from secret
 	string host, port, password;
@@ -272,7 +279,7 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	auto redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
 
 	// Check if a GigAPI index exists for this table
-	string redis_key = "giga:idx:ts:" + table_name;
+	string redis_key = "giga:idx:ts:" + qualified_name;
 	string exists_response = redis_conn->execute(RedisProtocol::formatExists(redis_key));
 	if (RedisProtocol::parseResponse(exists_response) != "1") {
 		// No index exists, let DuckDB handle it
@@ -312,7 +319,7 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	auto file_list_vec = RedisProtocol::parseArrayResponse(file_list_response);
 
 	if (file_list_vec.empty()) {
-		throw InvalidInputException("No files found in Redis for table '%s' in the given time range.", table_name);
+		throw InvalidInputException("No files found in Redis for table '%s' in the given time range.", qualified_name);
 	}
 
 	vector<Value> file_values;
@@ -341,17 +348,12 @@ ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string
 		return ParserExtensionParseResult();
 	}
 
+	// We only hijack simple SELECT statements.
 	if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::SELECT_STATEMENT) {
 		return ParserExtensionParseResult();
 	}
 
-	auto &select_statement = dynamic_cast<SelectStatement &>(*parser.statements[0]);
-	auto &select_node = *dynamic_cast<SelectNode *>(select_statement.node.get());
-	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
-		return ParserExtensionParseResult();
-	}
-
-	// It's a SELECT from a base table, let our planner handle it
+	// It's a SELECT statement, let our planner inspect it further.
 	return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
 }
 
