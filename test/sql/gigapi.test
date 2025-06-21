@@ -1,0 +1,23 @@
+# name: test/sql/gigapi.test
+# description: test gigapi extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT gigapi('Sam');
+----
+Catalog Error: Scalar Function with name gigapi does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require gigapi
+
+# Confirm the extension works
+query I
+SELECT gigapi('Sam');
+----
+Gigapi Sam 🐥
+
+query I
+SELECT gigapi_openssl_version('Michael') ILIKE 'Gigapi Michael, my linked OpenSSL version is OpenSSL%';
+----
+true

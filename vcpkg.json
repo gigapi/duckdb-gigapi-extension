@@ -1,6 +1,13 @@
 {
+        "name": "gigapi",
+        "version": "0.1.0",
         "dependencies": [
-                "openssl"
+          {
+            "name": "boost-asio"
+          },
+          {
+                "name": "openssl"
+          }
         ],
         "vcpkg-configuration": {
                 "overlay-ports": [
