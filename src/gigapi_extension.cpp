@@ -469,16 +469,9 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	// Now, we need to plan the rewritten statement
-	Planner planner(context);
-	planner.CreatePlan(*gigapi_parse_data.statement);
-	
-	auto logical_plan = std::move(planner.plan);
-
-	ParserExtensionPlanResult result;
-	result.plan = std::move(logical_plan);
-	result.success = result.plan ? true : false;
-	return result;
+	// The statement has been modified in place.
+	// Return a default result to signal success and that DuckDB should proceed with planning this modified statement.
+	return ParserExtensionPlanResult();
 }
 
 
