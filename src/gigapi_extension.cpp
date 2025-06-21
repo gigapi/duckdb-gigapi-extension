@@ -349,11 +349,55 @@ struct GigapiParserExtension : public ParserExtension {
 	}
 };
 
+static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto &sql_query_vector = args.data[0];
+	UnaryExecutor::Execute<string_t, string_t>(
+	    sql_query_vector, result, args.size(), [&](string_t sql_query) {
+		    // Parse the query
+		    Parser parser;
+		    parser.ParseQuery(sql_query.GetString());
+
+		    if (parser.statements.size() != 1 || parser.statements[0]->type != StatementType::SELECT_STATEMENT) {
+			    throw InvalidInputException("gigapi_dry_run expects a single SELECT statement");
+		    }
+
+		    auto select_statement = parser.statements[0]->Copy(); // Make a copy to modify
+		    auto &select_stmt_ref = dynamic_cast<SelectStatement &>(*select_statement);
+		    auto &select_node = *dynamic_cast<SelectNode *>(select_stmt_ref.node.get());
+
+		    if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
+			    throw InvalidInputException("gigapi_dry_run expects a SELECT from a single table");
+		    }
+
+		    // For a dry run, we use a dummy file list.
+			vector<Value> dummy_files;
+			dummy_files.emplace_back("dummy/file1.parquet");
+			dummy_files.emplace_back("dummy/file2.parquet");
+
+		    // Create a new table reference for read_parquet
+			vector<unique_ptr<ParsedExpression>> children;
+			children.push_back(make_uniq<ConstantExpression>(Value::LIST(dummy_files)));
+
+			auto new_table_ref = make_uniq<TableFunctionRef>();
+			new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
+
+		    // Replace the FROM clause of the original query
+		    select_node.from_table = std::move(new_table_ref);
+
+		    string rewritten_query = select_statement->ToString();
+		    return StringVector::AddString(result, rewritten_query);
+	    });
+}
+
 static void LoadInternal(DatabaseInstance &instance) {
 	CreateRedisSecretFunctions::Register(instance);
 	
 	auto &config = DBConfig::GetConfig(instance);
 	config.parser_extensions.push_back(GigapiParserExtension());
+
+	// Add the dry run function for testing
+	auto gigapi_dry_run_scalar = ScalarFunction("gigapi_dry_run", {LogicalType::VARCHAR}, LogicalType::VARCHAR, GigapiDryRunFunction);
+	ExtensionUtil::RegisterFunction(instance, gigapi_dry_run_scalar);
 }
 
 void GigapiExtension::Load(DuckDB &db) {
