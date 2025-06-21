@@ -11,8 +11,6 @@
 #include <openssl/opensslv.h>
 
 #include "duckdb/parser/parser_extension.hpp"
-#include "duckdb/planner/binder.hpp"
-#include "duckdb/planner/logical_plan_generator.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
