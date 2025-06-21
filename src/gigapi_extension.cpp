@@ -471,11 +471,14 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 
 	// Now, we need to plan the rewritten statement
 	Planner planner(context);
-	planner.CreatePlan(*gigapi_parse_data->statement);
+	planner.CreatePlan(*gigapi_parse_data.statement);
 	
 	auto logical_plan = std::move(planner.plan);
 
-	return ParserExtensionPlanResult(std::move(logical_plan));
+	ParserExtensionPlanResult result;
+	result.plan = std::move(logical_plan);
+	result.success = result.plan ? true : false;
+	return result;
 }
 
 
