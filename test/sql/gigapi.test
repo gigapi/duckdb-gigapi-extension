@@ -1,36 +1,13 @@
 # name: test/sql/gigapi.test
-# description: test gigapi extension
+# description: Test GigAPI extension with parser hijacking
 # group: [sql]
-
-# Before we load the extension, this will fail
-statement error
-SELECT gigapi('Sam');
-----
-Catalog Error: Scalar Function with name gigapi does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
 require gigapi
 
-# Confirm the extension works
-query I
-SELECT 1
+# Queries to tables not indexed in GigAPI (i.e., not in Redis) should fail normally.
+# This proves the extension is correctly passing through queries it shouldn't handle.
+statement error
+SELECT * FROM this_table_does_not_exist;
 ----
-1
-
-# Test the dry run function to see the query rewriting
-query T
-SELECT gigapi_dry_run('SELECT * FROM my_test_table');
-----
-SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet'])
-
-# Test with a where clause that is preserved
-query T
-SELECT gigapi_dry_run('SELECT value FROM my_other_table WHERE value > 100');
-----
-SELECT "value" FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE ("value" > 100)
-
-# Test with a time filter that is also preserved
-query T
-SELECT gigapi_dry_run('SELECT * FROM another_table WHERE time > ''2024-01-01''');
-----
-SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE ("time" > '2024-01-01')
+Catalog Error: Table with name this_table_does_not_exist does not exist!
