@@ -38,6 +38,7 @@
 #include "duckdb/catalog/catalog_transaction.hpp"
 #include "duckdb/common/pair.hpp"
 
+#include <regex>
 
 namespace duckdb {
 
@@ -387,38 +388,44 @@ static void GigapiFunction(ClientContext &context, TableFunctionInput &data_p, D
 
 ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
                                      unique_ptr<ParserExtensionParseData> parse_data) {
-	auto &gigapi_parse_data = dynamic_cast<GigapiParseData &>(*parse_data);
+	// Throw a binder exception to use our custom binder
+	throw BinderException("use gigapi_bind");
+}
 
-	// If it's not a SELECT statement, we don't handle it. Let DuckDB do its thing.
-	if (gigapi_parse_data.statement->type != StatementType::SELECT_STATEMENT) {
-		return ParserExtensionPlanResult();
+BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
+	if (statement.type != StatementType::SELECT_STATEMENT) {
+		return binder.Bind(statement);
 	}
-
-	auto &select_statement = dynamic_cast<SelectStatement &>(*gigapi_parse_data.statement);
+	auto &select_statement = (SelectStatement &)statement;
 	auto &select_node = *dynamic_cast<SelectNode *>(select_statement.node.get());
 
 	// Check if we can handle this query: it must be a SELECT from a single base table
 	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
-		return ParserExtensionPlanResult();
+		return binder.Bind(statement);
 	}
 
 	auto &table_ref = dynamic_cast<BaseTableRef &>(*select_node.from_table);
 	string qualified_name =
 	    table_ref.schema_name.empty() ? table_ref.table_name : table_ref.schema_name + "." + table_ref.table_name;
 
-	// Get Redis connection details from secret
+	// Get Redis connection details from secret, pass through if not found or connection fails
 	string host, port, password;
 	if (!GetRedisSecret(context, "gigapi", host, port, password)) {
-		throw InvalidInputException("Gigapi secret not found. Create a redis secret named 'gigapi'.");
+		return binder.Bind(statement);
 	}
-	auto redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
+	std::shared_ptr<RedisConnection> redis_conn;
+	try {
+		redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
+	} catch (const std::exception &e) {
+		return binder.Bind(statement);
+	}
 
 	// Check if a GigAPI index exists for this table
 	string redis_key = "giga:idx:ts:" + qualified_name;
 	string exists_response = redis_conn->execute(RedisProtocol::formatExists(redis_key));
 	if (RedisProtocol::parseResponse(exists_response) != "1") {
 		// No index exists, let DuckDB handle it
-		return ParserExtensionPlanResult();
+		return binder.Bind(statement);
 	}
 
 	// Index exists, proceed with rewrite
@@ -454,14 +461,15 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	auto file_list_vec = RedisProtocol::parseArrayResponse(file_list_response);
 
 	if (file_list_vec.empty()) {
-		throw InvalidInputException("No files found in Redis for table '%s' in the given time range.", qualified_name);
+		throw InvalidInputException("No files found in Redis for table '%s' in the given time range.",
+		                            qualified_name);
 	}
 
 	vector<Value> file_values;
 	for (const auto &file_path : file_list_vec) {
 		file_values.emplace_back(file_path);
 	}
-	
+
 	vector<unique_ptr<ParsedExpression>> children;
 	children.push_back(make_uniq<ConstantExpression>(Value::LIST(file_values)));
 
@@ -469,28 +477,19 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	// The statement has been modified in place.
-	// Return a default result to signal success and that DuckDB should proceed with planning this modified statement.
-	return ParserExtensionPlanResult();
+	return binder.Bind(statement);
 }
-
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
 	Parser parser;
 	try {
 		parser.ParseQuery(query);
 	} catch (const std::exception &e) {
-		// If it's not valid SQL, let the default parser handle it
+		// Let the default parser handle the error.
 		return ParserExtensionParseResult();
 	}
-
-	// We only hijack single statements for now.
-	if (parser.statements.size() != 1) {
-		return ParserExtensionParseResult();
-	}
-
-	// It's a parsable statement, let our planner inspect it further.
-	return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
+	return ParserExtensionParseResult(
+	    make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
 }
 
 struct GigapiParserExtension : public ParserExtension {
@@ -535,8 +534,8 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 		    }
 
 		    auto select_statement = parser.statements[0]->Copy(); // Make a copy to modify
-		    auto &select_stmt_ref = dynamic_cast<SelectStatement &>(*select_statement);
-		    auto &select_node = *dynamic_cast<SelectNode *>(select_stmt_ref.node.get());
+		    auto &select_stmt_ref = select_statement->Cast<SelectStatement>();
+		    auto &select_node = select_stmt_ref.node->Cast<SelectNode>();
 
 		    if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
 			    throw InvalidInputException("gigapi_dry_run expects a SELECT from a single table");
@@ -567,6 +566,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	
 	auto &config = DBConfig::GetConfig(instance);
 	config.parser_extensions.push_back(GigapiParserExtension());
+	config.operator_extensions.push_back(make_uniq<GigapiOperatorExtension>());
 
 	// Add the table function for testing
 	TableFunction gigapi_func("gigapi", {LogicalType::VARCHAR}, GigapiFunction, GigapiBind, GigapiInit);
