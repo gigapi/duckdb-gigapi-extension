@@ -287,7 +287,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 					// Note: This only works for literal timestamp strings.
 					// Expressions like `now()` are not evaluated here.
 					auto timestamp_val = Timestamp::FromString(cond.value);
-					auto nanos = Timestamp::ToEpochNanoseconds(timestamp_val);
+					auto nanos = TimestampNsToNanos(timestamp_val);
 					string nanos_str = std::to_string(nanos);
 
 					if (cond.operator_type == ">" || cond.operator_type == ">=") {
