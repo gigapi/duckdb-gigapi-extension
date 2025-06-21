@@ -280,8 +280,9 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 		throw InvalidInputException("Expected a single SELECT statement for gigapi function");
 	}
 
-	auto select_statement = parser.statements[0]->Copy()->Cast<SelectStatement>();
-	auto &select_node = *select_statement.node->Cast<SelectNode>();
+	auto select_statement_copy = parser.statements[0]->Copy();
+	auto &select_statement = select_statement_copy->Cast<SelectStatement>();
+	auto &select_node = select_statement.node->Cast<SelectNode>();
 
 	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
 		throw InvalidInputException("Expected a FROM clause with a single table for gigapi function");
@@ -343,7 +344,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	result->query = select_statement.ToString();
+	result->query = select_statement_copy->ToString();
 
 	// Execute the rewritten query to get the schema
 	Connection db_conn(*context.db);
