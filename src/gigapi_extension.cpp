@@ -473,8 +473,8 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	auto binder = Binder::CreateBinder(context);
 	auto bound_statement = binder->Bind(*gigapi_parse_data.statement);
 	
-	LogicalPlanner planner(*binder, context);
-	auto logical_plan = planner.CreatePlan(*bound_statement);
+	Planner planner(*binder);
+	auto logical_plan = planner.CreatePlan(bound_statement);
 
 	return ParserExtensionPlanResult(std::move(logical_plan));
 }
