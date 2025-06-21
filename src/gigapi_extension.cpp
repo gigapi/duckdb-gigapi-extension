@@ -482,7 +482,8 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	return binder.Bind(real_statement);
+	auto new_binder = Binder::CreateBinder(context);
+	return new_binder->Bind(select_statement);
 }
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
