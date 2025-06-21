@@ -493,6 +493,9 @@ ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string
 		// Let the default parser handle the error.
 		return ParserExtensionParseResult();
 	}
+	if (parser.statements.empty()) {
+		return ParserExtensionParseResult();
+	}
 	return ParserExtensionParseResult(
 	    make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
 }
