@@ -18,7 +18,7 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
-
+#include "duckdb/parser/statement/extension_statement.hpp"
 
 #include "gigapi_secret.hpp"
 #include "parse_where.hpp"
