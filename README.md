@@ -1,15 +1,15 @@
-# GigAPI DuckDB Extension
+# <img src="https://github.com/user-attachments/assets/5b0a4a37-ecab-4ca6-b955-1a2bbccad0b4" />
 
-This extension provides transparent, metadata-driven query acceleration for time-series data indexed by GigAPI's Redis-based backend.
+# <img src="https://github.com/user-attachments/assets/74a1fa93-5e7e-476d-93cb-be565eca4a59" height=25 /> GigAPI DuckDB Extension
+
+This extension provides transparent, metadata-driven query support for [GigAPI](https://github.com/gigapi)
 
 ## Overview
 
-The `gigapi` extension works by seamlessly intercepting SQL queries. When a query is made against a table, the extension first checks a Redis instance to see if a GigAPI index exists for that table.
+The `gigapi` extension seamlessly rewrites DuckDB SQL queries using GigAPI metadata indices.
 
 - If an index is found, the extension dynamically rewrites the query to read the specific data files (e.g., Parquet files on S3) relevant to the query's time range and other filters.
 - If no index is found, the query is passed on to DuckDB's default planner, allowing you to work with regular tables as usual.
-
-This provides a powerful query acceleration layer without changing how you write your SQL.
 
 ## Configuration
 
