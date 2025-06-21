@@ -27,10 +27,10 @@ SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet'])
 query T
 SELECT gigapi_dry_run('SELECT value FROM my_other_table WHERE value > 100');
 ----
-SELECT "value" FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE "value" > 100
+SELECT "value" FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE ("value" > 100)
 
 # Test with a time filter that is also preserved
 query T
 SELECT gigapi_dry_run('SELECT * FROM another_table WHERE time > ''2024-01-01''');
 ----
-SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE "time" > '2024-01-01'
+SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE ("time" > '2024-01-01')
