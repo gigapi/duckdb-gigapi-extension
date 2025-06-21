@@ -235,8 +235,15 @@ static bool GetRedisSecret(ClientContext &context, const string &secret_name, st
 
 struct GigapiBindData : public TableFunctionData {
 	string query;
+};
+
+struct GigapiState : public GlobalTableFunctionState {
 	unique_ptr<QueryResult> query_result;
 };
+
+static unique_ptr<GlobalTableFunctionState> GigapiInit(ClientContext &context, TableFunctionInitInput &input) {
+	return make_uniq<GigapiState>();
+}
 
 static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunctionBindInput &input,
                                            vector<LogicalType> &return_types, vector<string> &names) {
@@ -280,7 +287,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 					// Note: This only works for literal timestamp strings.
 					// Expressions like `now()` are not evaluated here.
 					auto timestamp_val = Timestamp::FromString(cond.value);
-					auto nanos = Timestamp::GetEpochNano(timestamp_val);
+					auto nanos = Timestamp::ToEpochNanoseconds(timestamp_val);
 					string nanos_str = std::to_string(nanos);
 
 					if (cond.operator_type == ">" || cond.operator_type == ">=") {
@@ -291,7 +298,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 						min_time = nanos_str;
 						max_time = nanos_str;
 					}
-				} catch (const duckdb::ConversionException &e) {
+				} catch (const std::exception &e) {
 					// Ignore conditions with values that can't be parsed as timestamps
 				}
 			}
@@ -319,9 +326,11 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	file_list_str += "]";
 	
 	// Create a new table reference for read_parquet
+	vector<unique_ptr<ParsedExpression>> children;
+	children.push_back(make_uniq<ConstantExpression>(Value(file_list_str)));
+
 	auto new_table_ref = make_uniq<TableFunctionRef>();
-	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(vector<unique_ptr<ParsedExpression>>()));
-	new_table_ref->function->children.push_back(make_uniq<ConstantExpression>(Value(file_list_str)));
+	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 
 	// Replace the FROM clause of the original query
 	select_node.from_table = std::move(new_table_ref);
@@ -348,14 +357,15 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 
 static void GigapiFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 	auto &bind_data = data_p.bind_data->Cast<GigapiBindData>();
+	auto &state = data_p.global_state->Cast<GigapiState>();
 
-	if (!bind_data.query_result) {
+	if (!state.query_result) {
 		// query_result is not initialized, create a new query result
 		Connection conn(*context.db);
-		bind_data.query_result = conn.Query(bind_data.query);
+		state.query_result = conn.Query(bind_data.query);
 	}
 
-	auto chunk = bind_data.query_result->Fetch();
+	auto chunk = state.query_result->Fetch();
 	if (!chunk || chunk->size() == 0) {
 		output.SetCardinality(0);
 		return;
@@ -366,7 +376,7 @@ static void GigapiFunction(ClientContext &context, TableFunctionInput &data_p, D
 
 static void LoadInternal(DatabaseInstance &instance) {
 	CreateRedisSecretFunctions::Register(instance);
-	TableFunction gigapi_func("gigapi", {LogicalType::VARCHAR}, GigapiFunction, GigapiBind);
+	TableFunction gigapi_func("gigapi", {LogicalType::VARCHAR}, GigapiFunction, GigapiBind, GigapiInit);
 	ExtensionUtil::RegisterFunction(instance, gigapi_func);
 }
 
