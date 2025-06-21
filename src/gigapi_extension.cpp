@@ -469,12 +469,11 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	// Now, we need to bind and plan the rewritten statement
-	auto binder = Binder::CreateBinder(context);
-	auto bound_statement = binder->Bind(*gigapi_parse_data.statement);
+	// Now, we need to plan the rewritten statement
+	Planner planner(context);
+	planner.CreatePlan(*gigapi_parse_data->statement);
 	
-	Planner planner(*binder);
-	auto logical_plan = planner.CreatePlan(bound_statement);
+	auto logical_plan = std::move(planner.plan);
 
 	return ParserExtensionPlanResult(std::move(logical_plan));
 }
