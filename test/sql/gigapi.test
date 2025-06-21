@@ -13,11 +13,24 @@ require gigapi
 
 # Confirm the extension works
 query I
-SELECT gigapi('Sam');
+SELECT 1
 ----
-Gigapi Sam 🐥
+1
 
-query I
-SELECT gigapi_openssl_version('Michael') ILIKE 'Gigapi Michael, my linked OpenSSL version is OpenSSL%';
+# Test the dry run function to see the query rewriting
+query T
+SELECT gigapi_dry_run('SELECT * FROM my_test_table');
 ----
-true
+SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet'])
+
+# Test with a where clause that is preserved
+query T
+SELECT gigapi_dry_run('SELECT value FROM my_other_table WHERE value > 100');
+----
+SELECT "value" FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE "value" > 100
+
+# Test with a time filter that is also preserved
+query T
+SELECT gigapi_dry_run('SELECT * FROM another_table WHERE time > ''2024-01-01''');
+----
+SELECT * FROM read_parquet(['dummy/file1.parquet', 'dummy/file2.parquet']) WHERE "time" > '2024-01-01'
