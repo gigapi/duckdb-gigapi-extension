@@ -12,16 +12,16 @@ public:
 };
 
 struct GigapiParseData : public ParserExtensionParseData {
-	string query;
-	explicit GigapiParseData(string query) : query(std::move(query)) {
+	unique_ptr<SQLStatement> statement;
+	explicit GigapiParseData(unique_ptr<SQLStatement> stmt) : statement(std::move(stmt)) {
 	}
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
-		return make_uniq<GigapiParseData>(query);
+		return make_uniq<GigapiParseData>(statement->Copy());
 	}
 
 	string ToString() const override {
-		return query;
+		return statement->ToString();
 	}
 };
 
@@ -33,6 +33,10 @@ struct GigapiOperatorExtension : public OperatorExtension {
 	}
 	std::string GetName() override {
 		return "gigapi";
+	}
+
+	unique_ptr<LogicalExtensionOperator> Deserialize(Deserializer &deserializer) override {
+		throw InternalException("GigAPI operator should not be serialized");
 	}
 };
 
