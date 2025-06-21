@@ -380,21 +380,33 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 }
 
 BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
-	if (statement.type != StatementType::SELECT_STATEMENT) {
+	if (statement.type != StatementType::EXTENSION_STATEMENT) {
 		return binder.Bind(statement);
 	}
-	auto &select_statement = (SelectStatement &)statement;
-	
+	auto &extension_statement = (ExtensionStatement &)statement;
+	if (extension_statement.extension.plan_function != gigapi_plan) {
+		return binder.Bind(statement);
+	}
+
+	// It's our extension, get the real statement from the parse data
+	auto &gigapi_parse_data = (GigapiParseData &)*extension_statement.parse_data;
+	auto &real_statement = *gigapi_parse_data.statement;
+
+	if (real_statement.type != StatementType::SELECT_STATEMENT) {
+		return binder.Bind(real_statement);
+	}
+	auto &select_statement = (SelectStatement &)real_statement;
+
 	// Safely cast to SelectNode, pass through if it's not a simple SELECT
 	auto select_node_ptr = dynamic_cast<SelectNode *>(select_statement.node.get());
 	if (!select_node_ptr) {
-		return binder.Bind(statement);
+		return binder.Bind(real_statement);
 	}
 	auto &select_node = *select_node_ptr;
 
 	// Check if we can handle this query: it must be a SELECT from a single base table
 	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
-		return binder.Bind(statement);
+		return binder.Bind(real_statement);
 	}
 
 	auto &table_ref = dynamic_cast<BaseTableRef &>(*select_node.from_table);
@@ -404,13 +416,13 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	// Get Redis connection details from secret, pass through if not found or connection fails
 	string host, port, password;
 	if (!GetRedisSecret(context, "gigapi", host, port, password)) {
-		return binder.Bind(statement);
+		return binder.Bind(real_statement);
 	}
 	std::shared_ptr<RedisConnection> redis_conn;
 	try {
 		redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
 	} catch (const std::exception &e) {
-		return binder.Bind(statement);
+		return binder.Bind(real_statement);
 	}
 
 	// Check if a GigAPI index exists for this table
@@ -418,7 +430,7 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	string exists_response = redis_conn->execute(RedisProtocol::formatExists(redis_key));
 	if (RedisProtocol::parseResponse(exists_response) != "1") {
 		// No index exists, let DuckDB handle it
-		return binder.Bind(statement);
+		return binder.Bind(real_statement);
 	}
 
 	// Index exists, proceed with rewrite
@@ -470,7 +482,7 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
 	select_node.from_table = std::move(new_table_ref);
 
-	return binder.Bind(statement);
+	return binder.Bind(real_statement);
 }
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
