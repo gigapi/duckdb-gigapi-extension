@@ -247,19 +247,6 @@ static bool GetRedisSecret(ClientContext &context, const string &secret_name, st
     return false;
 }
 
-struct GigapiParseData : public ParserExtensionParseData {
-	unique_ptr<SQLStatement> statement;
-	explicit GigapiParseData(unique_ptr<SQLStatement> stmt) : statement(std::move(stmt)) {}
-
-	unique_ptr<ParserExtensionParseData> Copy() const override {
-		return make_uniq<GigapiParseData>(statement->Copy());
-	}
-
-	string ToString() const override {
-		return statement->ToString();
-	}
-};
-
 struct GigapiBindData : public TableFunctionData {
 	string query;
 };
