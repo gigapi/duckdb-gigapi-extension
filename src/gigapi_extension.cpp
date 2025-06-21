@@ -421,7 +421,7 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 
 		    string rewritten_query = select_statement->ToString();
 		    return StringVector::AddString(result, rewritten_query);
-	    });
+	});
 }
 
 static void LoadInternal(DatabaseInstance &instance) {
