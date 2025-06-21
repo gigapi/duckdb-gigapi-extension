@@ -16,6 +16,11 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
+#include "duckdb/parser/tableref/table_function_ref.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/query_node/select_node.hpp"
+
 
 #include "gigapi_secret.hpp"
 #include "parse_where.hpp"
@@ -79,7 +84,7 @@ public:
     }
 
     static std::string formatZRangeByScore(const std::string& key, const std::string& min, const std::string& max) {
-        return "*4\r\n$15\r\nZRANGEBYSCORE\r\n$" +
+        return std::string("*4\r\n$15\r\nZRANGEBYSCORE\r\n") +
             "$" + std::to_string(key.length()) + "\r\n" + key + "\r\n" +
             "$" + std::to_string(min.length()) + "\r\n" + min + "\r\n" +
             "$" + std::to_string(max.length()) + "\r\n" + max + "\r\n";
@@ -211,9 +216,15 @@ static bool GetRedisSecret(ClientContext &context, const string &secret_name, st
             auto &secret = secret_match.GetSecret();
             const auto &kv_secret = dynamic_cast<const KeyValueSecret &>(secret);
             
-            host = kv_secret.GetValue("host").ToString();
-            port = kv_secret.GetValue("port").ToString();
-            password = kv_secret.GetValue("password").ToString();
+            Value host_val, port_val, password_val;
+			if (!kv_secret.TryGetValue("host", host_val) || !kv_secret.TryGetValue("port", port_val) ||
+			    !kv_secret.TryGetValue("password", password_val)) {
+				return false;
+			}
+
+            host = host_val.ToString();
+            port = port_val.ToString();
+            password = password_val.ToString();
             return true;
         }
     } catch (...) {
@@ -241,12 +252,13 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	}
 
 	auto select_statement = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(parser.statements[0]));
+	auto &select_node = *dynamic_cast<SelectNode *>(select_statement->node.get());
 
 	// Extract table name
-	if (!select_statement->node->from_table || select_statement->node->from_table->type != TableReferenceType::BASE_TABLE) {
+	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
 		throw InvalidInputException("Expected a FROM clause with a single table");
 	}
-	auto &table_ref = select_statement->node->from_table->Cast<BaseTableRef>();
+	auto &table_ref = select_node.from_table->Cast<BaseTableRef>();
 	auto table_name = table_ref.table_name;
 	
 	// Get Redis connection details from secret
@@ -258,9 +270,9 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	// Extract time range from WHERE clause
 	string min_time = "-inf";
 	string max_time = "+inf";
-	if (select_statement->node->where_clause) {
+	if (select_node.where_clause) {
 		vector<DetailedWhereConditionResult> conditions;
-		ExtractDetailedWhereConditionsFromExpression(*select_statement->node->where_clause, conditions);
+		ExtractDetailedWhereConditionsFromExpression(*select_node.where_clause, conditions);
 
 		for (const auto &cond : conditions) {
 			if (cond.column_name == "time") {
@@ -268,7 +280,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 					// Note: This only works for literal timestamp strings.
 					// Expressions like `now()` are not evaluated here.
 					auto timestamp_val = Timestamp::FromString(cond.value);
-					auto nanos = Timestamp::ToEpochNano(timestamp_val);
+					auto nanos = Timestamp::GetEpochNano(timestamp_val);
 					string nanos_str = std::to_string(nanos);
 
 					if (cond.operator_type == ">" || cond.operator_type == ">=") {
@@ -279,7 +291,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 						min_time = nanos_str;
 						max_time = nanos_str;
 					}
-				} catch (const ConversionException &e) {
+				} catch (const duckdb::ConversionException &e) {
 					// Ignore conditions with values that can't be parsed as timestamps
 				}
 			}
@@ -287,9 +299,9 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	}
 
 	// Query Redis for file list
-	auto conn = ConnectionPool::getInstance().getConnection(host, port, password);
+	auto redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
 	string redis_key = "giga:idx:ts:" + table_name;
-	string response = conn->execute(RedisProtocol::formatZRangeByScore(redis_key, min_time, max_time));
+	string response = redis_conn->execute(RedisProtocol::formatZRangeByScore(redis_key, min_time, max_time));
 	auto file_list_vec = RedisProtocol::parseArrayResponse(response);
 
 	if (file_list_vec.empty()) {
@@ -312,13 +324,13 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	new_table_ref->function->children.push_back(make_uniq<ConstantExpression>(Value(file_list_str)));
 
 	// Replace the FROM clause of the original query
-	select_statement->node->from_table = std::move(new_table_ref);
+	select_node.from_table = std::move(new_table_ref);
 	
 	result->query = select_statement->ToString();
 
 	// Execute the rewritten query to get the schema
-	Connection conn(*context.db);
-	auto dummy_result = conn.Query(result->query);
+	Connection db_conn(*context.db);
+	auto dummy_result = db_conn.Query(result->query);
 
 	if (dummy_result->HasError()) {
 		throw InvalidInputException("Error in rewritten query: %s", dummy_result->GetError());
