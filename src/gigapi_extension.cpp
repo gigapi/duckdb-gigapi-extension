@@ -408,6 +408,7 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 			vector<Value> dummy_files;
 			dummy_files.emplace_back("dummy/file1.parquet");
 			dummy_files.emplace_back("dummy/file2.parquet");
+  		        dummy_files.emplace_back("dummy/file2.parquet");
 
 		    // Create a new table reference for read_parquet
 			vector<unique_ptr<ParsedExpression>> children;
