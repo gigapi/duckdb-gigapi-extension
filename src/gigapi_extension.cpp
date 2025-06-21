@@ -11,6 +11,7 @@
 #include <openssl/opensslv.h>
 
 #include "duckdb/parser/parser_extension.hpp"
+#include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
@@ -233,17 +234,17 @@ struct GigapiParseData : public ParserExtensionParseData {
 	unique_ptr<SQLStatement> statement;
 	explicit GigapiParseData(unique_ptr<SQLStatement> stmt) : statement(std::move(stmt)) {}
 
-	unique_ptr<SQLStatement> Copy() const override {
-		return statement->Copy();
+	unique_ptr<ParserExtensionParseData> Copy() const override {
+		return make_uniq<GigapiParseData>(statement->Copy());
 	}
 };
 
 ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
                                      unique_ptr<ParserExtensionParseData> parse_data) {
-	auto &gigapi_parse_data = parse_data->Cast<GigapiParseData>();
-	auto &select_statement = gigapi_parse_data.statement->Cast<SelectStatement>();
-	auto &select_node = select_statement.node->Cast<SelectNode>();
-	auto &table_ref = select_node.from_table->Cast<BaseTableRef>();
+	auto &gigapi_parse_data = dynamic_cast<GigapiParseData &>(*parse_data);
+	auto &select_statement = dynamic_cast<SelectStatement &>(*gigapi_parse_data.statement);
+	auto &select_node = *dynamic_cast<SelectNode *>(select_statement.node.get());
+	auto &table_ref = dynamic_cast<BaseTableRef &>(*select_node.from_table);
 	auto table_name = table_ref.table_name;
 
 	// Get Redis connection details from secret
@@ -327,8 +328,8 @@ ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string
 		return ParserExtensionParseResult();
 	}
 
-	auto &select_statement = parser.statements[0]->Cast<SelectStatement>();
-	auto &select_node = select_statement.node->Cast<SelectNode>();
+	auto &select_statement = dynamic_cast<SelectStatement &>(*parser.statements[0]);
+	auto &select_node = *dynamic_cast<SelectNode *>(select_statement.node.get());
 	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
 		return ParserExtensionParseResult();
 	}
