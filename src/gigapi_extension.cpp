@@ -483,7 +483,7 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	select_node.from_table = std::move(new_table_ref);
 
 	auto new_binder = Binder::CreateBinder(context);
-	return new_binder->Bind(select_statement);
+	return new_binder->Bind(real_statement);
 }
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
