@@ -384,7 +384,13 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 		return binder.Bind(statement);
 	}
 	auto &select_statement = (SelectStatement &)statement;
-	auto &select_node = *dynamic_cast<SelectNode *>(select_statement.node.get());
+	
+	// Safely cast to SelectNode, pass through if it's not a simple SELECT
+	auto select_node_ptr = dynamic_cast<SelectNode *>(select_statement.node.get());
+	if (!select_node_ptr) {
+		return binder.Bind(statement);
+	}
+	auto &select_node = *select_node_ptr;
 
 	// Check if we can handle this query: it must be a SELECT from a single base table
 	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
