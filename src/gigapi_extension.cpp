@@ -382,7 +382,7 @@ GigapiParserExtension::GigapiParserExtension() {
 	plan_function = gigapi_plan;
 }
 
-GigapiOperatorExtension::GigapiOperatorExtension() : OperatorExtension() {
+GigapiOperatorExtension::GigapiOperatorExtension() {
 	bind_statement = gigapi_bind;
 }
 
