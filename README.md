@@ -44,8 +44,8 @@ The primary way to use the extension is via the `gigapi()` table function. You p
 
 ```sql
 -- Load the extension
-INSTALL 'gigapi';
-LOAD 'gigapi';
+INSTALL gigapi FROM community;
+LOAD gigapi;
 
 -- Create the Redis secret for the GigAPI backend
 CREATE SECRET gigapi (
