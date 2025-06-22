@@ -421,6 +421,10 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 }
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
+	if (!StringUtil::StartsWith(query, "--gigapi")) {
+		return ParserExtensionParseResult();
+	}
+
 	Parser parser;
 	try {
 		parser.ParseQuery(query);
@@ -432,7 +436,8 @@ ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string
 		return ParserExtensionParseResult();
 	}
 
-	return ParserExtensionParseResult(make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
+	return ParserExtensionParseResult(
+	    make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
 }
 
 GigapiParserExtension::GigapiParserExtension() {
