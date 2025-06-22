@@ -1,6 +1,8 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
+#include "duckdb/main/client_context_state.hpp"
 #include "duckdb/parser/parser_extension.hpp"
 #include "duckdb/planner/operator_extension.hpp"
 
@@ -9,13 +11,13 @@ namespace duckdb {
 struct GigapiParseData : public ParserExtensionParseData {
 	unique_ptr<SQLStatement> statement;
 
-	GigapiParseData(unique_ptr<SQLStatement> statement);
+	explicit GigapiParseData(unique_ptr<SQLStatement> statement);
 
 	unique_ptr<ParserExtensionParseData> Copy() const override;
 	string ToString() const override;
 };
 
-struct GigapiState : public RegisteredState {
+struct GigapiState : public ClientContextState {
 	explicit GigapiState(unique_ptr<ParserExtensionParseData> parse_data);
 	~GigapiState() override = default;
 
@@ -34,6 +36,8 @@ struct GigapiParserExtension : public ParserExtension {
 class GigapiOperatorExtension : public OperatorExtension {
 public:
 	GigapiOperatorExtension();
+	std::string GetName() override;
+	unique_ptr<LogicalExtensionOperator> Deserialize(Deserializer &deserializer) override;
 };
 
 class GigapiExtension : public Extension {

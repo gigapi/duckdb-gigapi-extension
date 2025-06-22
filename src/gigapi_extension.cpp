@@ -272,7 +272,7 @@ static unique_ptr<GlobalTableFunctionState> GigapiInit(ClientContext &context, T
 	auto bind_data = input.bind_data->Copy();
 	auto &gigapi_bind_data = dynamic_cast<GigapiBindData &>(*bind_data);
 
-	Connection con(context.db);
+	Connection con(*context.db);
 	auto query_result = con.Query(gigapi_bind_data.query);
 
 	auto result = make_uniq<GigapiData>();
@@ -286,7 +286,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 	auto result = make_uniq<GigapiBindData>();
 	result->query = input.inputs[0].GetValue<string>();
 
-	Connection con(context.db);
+	Connection con(*context.db);
 	auto statement = con.ExtractStatements(result->query);
 	if (statement.empty()) {
 		throw InvalidInputException("No statements found in query");
@@ -300,7 +300,7 @@ static unique_ptr<FunctionData> GigapiBind(ClientContext &context, TableFunction
 		}
 		for (idx_t i = 0; i < chunk->ColumnCount(); i++) {
 			return_types.push_back(chunk->GetTypes()[i]);
-			names.push_back(chunk->GetNames()[i]);
+			names.push_back(stream_result->names[i]);
 		}
 		break;
 	}
@@ -325,22 +325,22 @@ static void GigapiFunction(ClientContext &context, TableFunctionInput &data_p, D
 
 BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
 	if (statement.type != StatementType::EXTENSION_STATEMENT) {
-		return nullptr;
+		return {};
 	}
 	auto &extension_statement = dynamic_cast<ExtensionStatement &>(statement);
 	if (extension_statement.extension.parse_function != gigapi_parse) {
-		return nullptr;
+		return {};
 	}
 
 	auto lookup = context.registered_state->Get<GigapiState>("gigapi_state");
 	if (!lookup) {
-		return nullptr;
+		return {};
 	}
 	auto gigapi_state = (GigapiState *)lookup.get();
 	auto gigapi_binder = Binder::CreateBinder(context, &binder);
 	auto gigapi_parse_data = dynamic_cast<GigapiParseData *>(gigapi_state->parse_data.get());
 	if (!gigapi_parse_data) {
-		return nullptr;
+		return {};
 	}
 
 	// At this point, you can inspect the query and decide what to do.
@@ -383,7 +383,15 @@ GigapiParserExtension::GigapiParserExtension() {
 }
 
 GigapiOperatorExtension::GigapiOperatorExtension() : OperatorExtension() {
-	bind_function = gigapi_bind;
+	bind_statement = gigapi_bind;
+}
+
+std::string GigapiOperatorExtension::GetName() {
+	return "gigapi";
+}
+
+unique_ptr<LogicalExtensionOperator> GigapiOperatorExtension::Deserialize(Deserializer &deserializer) {
+	throw NotImplementedException("GigapiOperatorExtension cannot be deserialized");
 }
 
 static void GigapiTestCreateEmptyIndexFunction(DataChunk &args, ExpressionState &state, Vector &result) {
