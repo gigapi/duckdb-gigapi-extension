@@ -437,14 +437,14 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 
 ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
                                      unique_ptr<ParserExtensionParseData> parse_data) {
-	auto gigapi_state = make_shared_ptr<GigapiState>(std::move(parse_data));
+	auto gigapi_state = make_shared_ptr<GigapiPlannerState>(std::move(parse_data));
 	context.registered_state->Remove("gigapi");
 	context.registered_state->Insert("gigapi", gigapi_state);
 	throw BinderException("use gigapi_bind");
 }
 
 BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
-	auto lookup = context.registered_state->Get<GigapiState>("gigapi");
+	auto lookup = context.registered_state->Get<GigapiPlannerState>("gigapi");
 	if (!lookup) {
 		return binder.Bind(statement);
 	}
@@ -457,16 +457,17 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 		return binder.Bind(real_statement);
 	}
 
-	auto select_statement_copy = real_statement.Copy()->Cast<SelectStatement>();
+	auto select_statement_copy_ptr = real_statement.Copy();
+	auto &select_statement_copy = select_statement_copy_ptr->Cast<SelectStatement>();
 
 	auto *select_node_ptr = dynamic_cast<SelectNode *>(select_statement_copy.node.get());
 	if (!select_node_ptr) {
-		return binder.Bind(select_statement_copy);
+		return binder.Bind(real_statement);
 	}
 
 	auto &select_node = *select_node_ptr;
 	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
-		return binder.Bind(select_statement_copy);
+		return binder.Bind(real_statement);
 	}
 
 	auto &table_ref = dynamic_cast<BaseTableRef &>(*select_node.from_table);
@@ -475,19 +476,19 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 
 	string host, port, password;
 	if (!GetRedisSecret(context, "gigapi", host, port, password)) {
-		return binder.Bind(select_statement_copy);
+		return binder.Bind(real_statement);
 	}
 	std::shared_ptr<RedisConnection> redis_conn;
 	try {
 		redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
 	} catch (const std::exception &e) {
-		return binder.Bind(select_statement_copy);
+		return binder.Bind(real_statement);
 	}
 
 	string redis_key = "giga:idx:ts:" + qualified_name;
 	string exists_response = redis_conn->execute(RedisProtocol::formatExists(redis_key));
 	if (RedisProtocol::parseResponse(exists_response) != "1") {
-		return binder.Bind(select_statement_copy);
+		return binder.Bind(real_statement);
 	}
 
 	string min_time = "-inf";
@@ -538,7 +539,7 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	select_node.from_table = std::move(new_table_ref);
 
 	auto new_binder = Binder::CreateBinder(context, &binder);
-	return new_binder->Bind(select_statement_copy);
+	return new_binder->Bind(*select_statement_copy_ptr);
 }
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {

@@ -18,13 +18,18 @@ struct GigapiParseData : public ParserExtensionParseData {
 		return make_uniq_base<ParserExtensionParseData, GigapiParseData>(statement->Copy());
 	}
 
+	string ToString() const override {
+		return statement->ToString();
+	}
+
 	explicit GigapiParseData(unique_ptr<SQLStatement> statement_p) : statement(std::move(statement_p)) {
 	}
 };
 
-class GigapiState : public ClientContextState {
+class GigapiPlannerState : public ClientContextState {
 public:
-	explicit GigapiState(unique_ptr<ParserExtensionParseData> parse_data_p) : parse_data(std::move(parse_data_p)) {
+	explicit GigapiPlannerState(unique_ptr<ParserExtensionParseData> parse_data_p)
+	    : parse_data(std::move(parse_data_p)) {
 	}
 
 	void QueryEnd() override {
