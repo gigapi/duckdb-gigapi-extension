@@ -67,18 +67,21 @@ Behind the scenes, the extension will perform the following steps:
 5. Rewrite the query to be `SELECT * FROM read_parquet(['file1.parquet', 'file2.parquet', ...]) WHERE time > now() - interval '1 hour'`.
 6. Pass the rewritten query to the DuckDB planner for execution.
 
-## Transparent Planner (Experimental)
+## Transparent Query Hijacking with `GIGAPI`
 
-The extension also includes an experimental transparent query planner. When enabled, it aims to automatically rewrite queries without requiring the `gigapi()` function wrapper.
+As a more powerful alternative to the `gigapi()` table function, you can use the `GIGAPI` keyword at the beginning of any query. This will trigger the same query rewriting logic but allows you to use standard SQL syntax without wrapping your query in a string.
 
-**Note:** This feature is currently under development and may not behave as expected.
+### How it Works
+Any query prefixed with `GIGAPI ` will be automatically intercepted by the extension's query planner. The planner then rewrites the query based on the metadata found in Redis, just like the `gigapi()` function does.
 
-### Example (Intended)
+### Example
 
 ```sql
--- The same query, without the gigapi() wrapper
-SELECT * FROM my_measurement WHERE time > now() - interval '1 hour';
+-- The same query, but using the GIGAPI keyword for transparent hijacking.
+GIGAPI SELECT * FROM my_measurement WHERE time > now() - interval '1 hour';
 ```
+
+Behind the scenes, the extension performs the same steps as the `gigapi()` table function, rewriting the query to read from specific data files before execution. If a query is not prefixed with `GIGAPI`, it will be handled by DuckDB's default planner.
 
 ## Developer Information
 
