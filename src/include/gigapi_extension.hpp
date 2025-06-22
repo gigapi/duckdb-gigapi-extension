@@ -13,10 +13,9 @@ public:
 
 struct GigapiParseData : public ParserExtensionParseData {
 	unique_ptr<SQLStatement> statement;
-	bool from_gigapi = true;
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
-		return make_uniq_base<ParserExtensionParseData, GigapiParseData>(statement->Copy());
+		return make_uniq<GigapiParseData>(statement->Copy());
 	}
 
 	string ToString() const override {
@@ -27,9 +26,24 @@ struct GigapiParseData : public ParserExtensionParseData {
 	}
 };
 
-class GigapiPlannerState : public ClientContextState {
-public:
-	explicit GigapiPlannerState(unique_ptr<ParserExtensionParseData> parse_data_p)
+BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
+
+struct GigapiOperatorExtension : public OperatorExtension {
+	GigapiOperatorExtension() : OperatorExtension() {
+		bind = gigapi_bind;
+	}
+
+	string GetName() const override {
+		return "gigapi";
+	}
+
+	unique_ptr<LogicalExtensionOperator> Deserialize(Deserializer &deserializer) override {
+		throw InternalException("GigAPI operator should not be serialized");
+	}
+};
+
+struct GigapiState : public GlobalTableFunctionState {
+	explicit GigapiState(unique_ptr<ParserExtensionParseData> parse_data_p)
 	    : parse_data(std::move(parse_data_p)) {
 	}
 
@@ -38,21 +52,6 @@ public:
 	}
 
 	unique_ptr<ParserExtensionParseData> parse_data;
-};
-
-BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
-
-struct GigapiOperatorExtension : public OperatorExtension {
-	GigapiOperatorExtension() : OperatorExtension() {
-		Bind = gigapi_bind;
-	}
-	std::string GetName() override {
-		return "gigapi";
-	}
-
-	unique_ptr<LogicalExtensionOperator> Deserialize(Deserializer &deserializer) override {
-		throw InternalException("GigAPI operator should not be serialized");
-	}
 };
 
 } // namespace duckdb

@@ -435,137 +435,31 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 	});
 }
 
-ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
-                                     unique_ptr<ParserExtensionParseData> parse_data) {
-	auto &gigapi_parse_data = dynamic_cast<GigapiParseData &>(*parse_data);
-
-	if (!gigapi_parse_data.from_gigapi) {
-		return ParserExtensionPlanResult();
-	}
-
-	auto gigapi_state = make_shared_ptr<GigapiPlannerState>(std::move(parse_data));
-	context.registered_state->Remove("gigapi");
-	context.registered_state->Insert("gigapi", gigapi_state);
-	throw BinderException("use gigapi_bind");
-}
-
-BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement) {
-	auto lookup = context.registered_state->Get<GigapiPlannerState>("gigapi");
-	if (!lookup) {
-		return binder.Bind(statement);
-	}
-
-	auto &gigapi_state = *lookup;
-	auto &parse_data = dynamic_cast<GigapiParseData &>(*gigapi_state.parse_data);
-	auto &real_statement = *parse_data.statement;
-
-	if (real_statement.type != StatementType::SELECT_STATEMENT) {
-		return binder.Bind(real_statement);
-	}
-
-	auto select_statement_copy_ptr = real_statement.Copy();
-	auto &select_statement_copy = select_statement_copy_ptr->Cast<SelectStatement>();
-
-	auto *select_node_ptr = dynamic_cast<SelectNode *>(select_statement_copy.node.get());
-	if (!select_node_ptr) {
-		return binder.Bind(real_statement);
-	}
-
-	auto &select_node = *select_node_ptr;
-	if (!select_node.from_table || select_node.from_table->type != TableReferenceType::BASE_TABLE) {
-		return binder.Bind(real_statement);
-	}
-
-	auto &table_ref = dynamic_cast<BaseTableRef &>(*select_node.from_table);
-	string qualified_name =
-	    table_ref.schema_name.empty() ? table_ref.table_name : table_ref.schema_name + "." + table_ref.table_name;
-
-	string host, port, password;
-	if (!GetRedisSecret(context, "gigapi", host, port, password)) {
-		return binder.Bind(real_statement);
-	}
-	std::shared_ptr<RedisConnection> redis_conn;
-	try {
-		redis_conn = ConnectionPool::getInstance().getConnection(host, port, password);
-	} catch (const std::exception &e) {
-		return binder.Bind(real_statement);
-	}
-
-	string redis_key = "giga:idx:ts:" + qualified_name;
-	string exists_response = redis_conn->execute(RedisProtocol::formatExists(redis_key));
-	if (RedisProtocol::parseResponse(exists_response) != "1") {
-		return binder.Bind(real_statement);
-	}
-
-	string min_time = "-inf";
-	string max_time = "+inf";
-	if (select_node.where_clause) {
-		vector<DetailedWhereConditionResult> conditions;
-		ExtractDetailedWhereConditionsFromExpression(*select_node.where_clause, conditions);
-
-		for (const auto &cond : conditions) {
-			if (cond.column_name == "time") {
-				try {
-					auto timestamp_val = Timestamp::FromString(cond.value);
-					auto nanos = timestamp_val.value * 1000;
-					string nanos_str = std::to_string(nanos);
-
-					if (cond.operator_type == ">" || cond.operator_type == ">=") {
-						min_time = nanos_str;
-					} else if (cond.operator_type == "<" || cond.operator_type == "<=") {
-						max_time = nanos_str;
-					} else if (cond.operator_type == "=") {
-						min_time = nanos_str;
-						max_time = nanos_str;
-					}
-				} catch (const std::exception &e) {
-				}
-			}
-		}
-	}
-
-	string file_list_response = redis_conn->execute(RedisProtocol::formatZRangeByScore(redis_key, min_time, max_time));
-	auto file_list_vec = RedisProtocol::parseArrayResponse(file_list_response);
-
-	if (file_list_vec.empty()) {
-		throw InvalidInputException("No files found in Redis for table '%s' in the given time range.",
-		                            qualified_name);
-	}
-
-	vector<Value> file_values;
-	for (const auto &file_path : file_list_vec) {
-		file_values.emplace_back(file_path);
-	}
-
-	vector<unique_ptr<ParsedExpression>> children;
-	children.push_back(make_uniq<ConstantExpression>(Value::LIST(file_values)));
-
-	auto new_table_ref = make_uniq<TableFunctionRef>();
-	new_table_ref->function = make_uniq<FunctionExpression>("read_parquet", std::move(children));
-	select_node.from_table = std::move(new_table_ref);
-
-	auto new_binder = Binder::CreateBinder(context, &binder);
-	return new_binder->Bind(*select_statement_copy_ptr);
-}
-
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
-	Parser parser;
-	try {
-		parser.ParseQuery(query);
-	} catch (const std::exception &e) {
-		return ParserExtensionParseResult();
+	std::regex gigapi_regex(R"(\s*FROM\s+GIGAPI\s*\(\s*'?(\w+(\.\w+)?)'?\s*\))", std::regex_constants::icase);
+	std::smatch matches;
+
+	if (std::regex_search(query, matches, gigapi_regex) && matches.size() > 1) {
+		std::string table_name = matches[1].str();
+		std::string rewritten_query = std::regex_replace(query, gigapi_regex, " FROM " + table_name);
+
+		Parser parser;
+		parser.ParseQuery(rewritten_query);
+		if (parser.statements.empty()) {
+			return ParserExtensionParseResult();
+		}
+
+		auto parse_data = make_uniq<GigapiParseData>(std::move(parser.statements[0]));
+
+		return ParserExtensionParseResult(make_uniq<ExtensionStatement>("gigapi", std::move(parse_data)));
 	}
-	if (parser.statements.empty()) {
-		return ParserExtensionParseResult();
-	}
-	return ParserExtensionParseResult(
-	    make_uniq_base<ParserExtensionParseData, GigapiParseData>(std::move(parser.statements[0])));
+
+	return ParserExtensionParseResult();
 }
 
 struct GigapiParserExtension : public ParserExtension {
 	GigapiParserExtension() {
 		parse_function = gigapi_parse;
-		plan_function = gigapi_plan;
 	}
 };
 
