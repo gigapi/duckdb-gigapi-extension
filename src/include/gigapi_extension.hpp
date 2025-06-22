@@ -13,16 +13,25 @@ public:
 
 struct GigapiParseData : public ParserExtensionParseData {
 	unique_ptr<SQLStatement> statement;
-	explicit GigapiParseData(unique_ptr<SQLStatement> stmt) : statement(std::move(stmt)) {
-	}
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
-		return make_uniq<GigapiParseData>(statement->Copy());
+		return make_uniq_base<ParserExtensionParseData, GigapiParseData>(statement->Copy());
 	}
 
-	string ToString() const override {
-		return statement->ToString();
+	explicit GigapiParseData(unique_ptr<SQLStatement> statement_p) : statement(std::move(statement_p)) {
 	}
+};
+
+class GigapiState : public ClientContextState {
+public:
+	explicit GigapiState(unique_ptr<ParserExtensionParseData> parse_data_p) : parse_data(std::move(parse_data_p)) {
+	}
+
+	void QueryEnd() override {
+		parse_data.reset();
+	}
+
+	unique_ptr<ParserExtensionParseData> parse_data;
 };
 
 BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExtensionInfo *info, SQLStatement &statement);
