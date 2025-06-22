@@ -383,7 +383,7 @@ GigapiParserExtension::GigapiParserExtension() {
 }
 
 GigapiOperatorExtension::GigapiOperatorExtension() {
-	bind_statement = gigapi_bind;
+	Bind = gigapi_bind;
 }
 
 std::string GigapiOperatorExtension::GetName() {
