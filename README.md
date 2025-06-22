@@ -36,9 +36,9 @@ CREATE SECRET gigapi (
 - `PASSWORD`: The password for your Redis server. (Optional)
 
 
-## Usage
+## Usage: `gigapi()` Table Function
 
-The primary way to use the extension is via the `gigapi()` table function. You pass a complete SQL query as a string to this function. The extension will then connect to the Redis instance specified in your `gigapi` secret, find the relevant data files for your query, and rewrite it to read from them directly.
+The primary way to use the extension is via the `gigapi()` table function. You pass a complete SQL query as a string to this function. The extension will then rewrite it using the metadata from Redis and execute it.
 
 ### Example
 
@@ -55,17 +55,30 @@ CREATE SECRET gigapi (
     PASSWORD ''
 );
 
--- Use the gigapi() table function to run a query against an indexed table
+-- Use the gigapi() table function to run a query
 SELECT * FROM gigapi('SELECT * FROM my_measurement WHERE time > now() - interval ''1 hour''');
 ```
 
 Behind the scenes, the extension will perform the following steps:
-1. Parse the inner `SELECT` query to identify the table (`my_measurement`).
+1. Parse the inner `SELECT` query.
 2. Check Redis for a key named `giga:idx:ts:my_measurement`.
 3. If the key exists, extract the time range from the `WHERE` clause.
 4. Fetch the relevant list of data files from the Redis sorted set.
 5. Rewrite the query to be `SELECT * FROM read_parquet(['file1.parquet', 'file2.parquet', ...]) WHERE time > now() - interval '1 hour'`.
 6. Pass the rewritten query to the DuckDB planner for execution.
+
+## Transparent Planner (Experimental)
+
+The extension also includes an experimental transparent query planner. When enabled, it aims to automatically rewrite queries without requiring the `gigapi()` function wrapper.
+
+**Note:** This feature is currently under development and may not behave as expected.
+
+### Example (Intended)
+
+```sql
+-- The same query, without the gigapi() wrapper
+SELECT * FROM my_measurement WHERE time > now() - interval '1 hour';
+```
 
 ## Developer Information
 

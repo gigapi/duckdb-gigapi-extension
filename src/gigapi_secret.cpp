@@ -39,14 +39,13 @@ static unique_ptr<BaseSecret> CreateRedisSecretFromConfig(ClientContext &context
     return std::move(result);
 }
 
-// Deserialization
 static unique_ptr<BaseSecret> RedisSecretDeserialize(Deserializer &deserializer, BaseSecret base_secret) {
-	auto result = KeyValueSecret::Deserialize<KeyValueSecret>(deserializer, std::move(base_secret));
-	auto kv_secret = dynamic_cast<KeyValueSecret *>(result.get());
-	if (kv_secret) {
-		RedactCommonKeys(*kv_secret);
-	}
-	return result;
+    auto result = KeyValueSecret::Deserialize<KeyValueSecret>(deserializer, std::move(base_secret));
+    auto kv_secret = dynamic_cast<KeyValueSecret*>(result.get());
+    if (kv_secret) {
+        RedactCommonKeys(*kv_secret);
+    }
+    return std::move(result);
 }
 
 void CreateRedisSecretFunctions::Register(DatabaseInstance &instance) {
