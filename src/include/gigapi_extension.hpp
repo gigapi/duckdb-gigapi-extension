@@ -13,6 +13,7 @@ public:
 
 struct GigapiParseData : public ParserExtensionParseData {
 	unique_ptr<SQLStatement> statement;
+	bool from_gigapi = true;
 
 	unique_ptr<ParserExtensionParseData> Copy() const override {
 		return make_uniq_base<ParserExtensionParseData, GigapiParseData>(statement->Copy());

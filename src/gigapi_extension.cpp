@@ -437,6 +437,12 @@ static void GigapiDryRunFunction(DataChunk &args, ExpressionState &state, Vector
 
 ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
                                      unique_ptr<ParserExtensionParseData> parse_data) {
+	auto &gigapi_parse_data = dynamic_cast<GigapiParseData &>(*parse_data);
+
+	if (!gigapi_parse_data.from_gigapi) {
+		return ParserExtensionPlanResult();
+	}
+
 	auto gigapi_state = make_shared_ptr<GigapiPlannerState>(std::move(parse_data));
 	context.registered_state->Remove("gigapi");
 	context.registered_state->Insert("gigapi", gigapi_state);
