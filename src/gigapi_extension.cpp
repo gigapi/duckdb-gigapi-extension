@@ -412,8 +412,8 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 	// Create a new statement to demonstrate we can transpile the query
 	auto new_select_node = make_uniq<SelectNode>();
 	new_select_node->select_list.push_back(make_uniq<ConstantExpression>(Value::INTEGER(42)));
-	auto new_statement = make_uniq<SelectStatement>();
-	new_statement->node = std::move(new_select_node);
+	unique_ptr<SQLStatement> new_statement = make_uniq<SelectStatement>();
+	new_statement->Cast<SelectStatement>().node = std::move(new_select_node);
 
 	return gigapi_binder->Bind(*new_statement);
 }
