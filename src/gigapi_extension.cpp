@@ -422,9 +422,10 @@ ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &cont
 
 ParserExtensionParseResult gigapi_parse(ParserExtensionInfo *, const std::string &query) {
 	string modified_query = query;
-	if (StringUtil::StartsWith(modified_query, "--gigapi")) {
+	const char *keyword = "GIGAPI ";
+	if (query.rfind(keyword, 0) == 0) {
 		// It starts with our keyword. Let's remove it before parsing.
-		modified_query.erase(0, strlen("--gigapi"));
+		modified_query.erase(0, strlen(keyword));
 	} else {
 		// Not for us, pass it on.
 		return ParserExtensionParseResult();
