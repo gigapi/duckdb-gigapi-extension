@@ -409,13 +409,12 @@ BoundStatement gigapi_bind(ClientContext &context, Binder &binder, OperatorExten
 		return {};
 	}
 
-	// Create a new statement to demonstrate we can transpile the query
-	auto new_select_node = make_uniq<SelectNode>();
-	new_select_node->select_list.push_back(make_uniq<ConstantExpression>(Value::INTEGER(42)));
-	unique_ptr<SQLStatement> new_statement = make_uniq<SelectStatement>();
-	new_statement->Cast<SelectStatement>().node = std::move(new_select_node);
+	// To demonstrate we can transpile the query, we will parse a new query
+	// and bind the result of that.
+	Parser parser;
+	parser.ParseQuery("SELECT 42");
 
-	return gigapi_binder->Bind(*new_statement);
+	return gigapi_binder->Bind(*parser.statements[0]);
 }
 
 ParserExtensionPlanResult gigapi_plan(ParserExtensionInfo *, ClientContext &context,
