@@ -60,11 +60,9 @@ public:
 };
 
 void RegisterGigapiAttach(DatabaseInstance &instance) {
-    // Register the storage extension for TYPE gigapi and common variants
+    // Register the storage extension for TYPE GIGAPI as 'gigapi_scanner' to match DuckDB's expected pattern
     auto &config = DBConfig::GetConfig(instance);
-    config.storage_extensions["gigapi"] = make_uniq<GigapiStorageExtension>();
     config.storage_extensions["gigapi_scanner"] = make_uniq<GigapiStorageExtension>();
-    config.storage_extensions["GIGAPI"] = make_uniq<GigapiStorageExtension>();
 }
 
 } // namespace duckdb 
