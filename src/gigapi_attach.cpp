@@ -7,7 +7,7 @@
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/attached_database.hpp"
-#include "duckdb/main/storage_extension.hpp"
+#include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include <string>
 #include <vector>
