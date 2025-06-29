@@ -16,48 +16,45 @@
 
 namespace duckdb {
 
-class GigapiStorageExtension : public StorageExtension {
-public:
-    unique_ptr<Catalog> Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const string &name, AttachInfo &info, AccessMode access_mode) {
-        // info.path = database name
-        // name = attached schema
-        std::string database_name = info.path;
+unique_ptr<Catalog> GigapiStorageExtension::Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const string &name, AttachInfo &info, AccessMode access_mode) {
+    // info.path = database name
+    // name = attached schema
+    std::string database_name = info.path;
 
-        // 1. Create the schema if it doesn't exist (use SQL for IF NOT EXISTS)
-        std::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
-        auto schema_res = context.Query(create_schema_sql, false);
-        if (schema_res->HasError()) {
-            throw Exception(ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
-        }
+    // 1. Create the schema if it doesn't exist (use SQL for IF NOT EXISTS)
+    std::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
+    auto schema_res = context.Query(create_schema_sql, false);
+    if (schema_res->HasError()) {
+        throw Exception(ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
+    }
 
-        // 2. Enumerate tables via gigapi('SHOW TABLES')
-        auto show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
-        auto result = context.Query(show_tables_query, false);
-        if (!result || result->HasError()) {
-            throw Exception(ExceptionType::CATALOG, "Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
-        }
+    // 2. Enumerate tables via gigapi('SHOW TABLES')
+    auto show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
+    auto result = context.Query(show_tables_query, false);
+    if (!result || result->HasError()) {
+        throw Exception(ExceptionType::CATALOG, "Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
+    }
 
-        // 3. For each table, create a view in the attached schema
-        while (true) {
-            auto chunk = result->Fetch();
-            if (!chunk || chunk->size() == 0) break;
-            for (idx_t i = 0; i < chunk->size(); ++i) {
-                auto &vector = chunk->data[0];
-                if (!FlatVector::Validity(vector).RowIsValid(i)) continue;
-                std::string table_name = vector.GetValue(i).ToString();
-                std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
-                                       " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
-                auto view_res = context.Query(view_sql, false);
-                if (view_res->HasError()) {
-                    throw Exception(ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
-                }
+    // 3. For each table, create a view in the attached schema
+    while (true) {
+        auto chunk = result->Fetch();
+        if (!chunk || chunk->size() == 0) break;
+        for (idx_t i = 0; i < chunk->size(); ++i) {
+            auto &vector = chunk->data[0];
+            if (!FlatVector::Validity(vector).RowIsValid(i)) continue;
+            std::string table_name = vector.GetValue(i).ToString();
+            std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
+                                   " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
+            auto view_res = context.Query(view_sql, false);
+            if (view_res->HasError()) {
+                throw Exception(ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
             }
         }
-
-        // Return nullptr (no custom catalog needed, views are registered)
-        return nullptr;
     }
-};
+
+    // Return nullptr (no custom catalog needed, views are registered)
+    return nullptr;
+}
 
 void RegisterGigapiAttach(DatabaseInstance &instance) {
     // Register the storage extension for TYPE GIGAPI as 'gigapi_scanner' to match DuckDB's expected pattern
