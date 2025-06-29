@@ -5,7 +5,7 @@
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/main/extension_util.hpp"
-#include "duckdb/main/db_config.hpp"
+#include "duckdb/main/config.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/storage_extension.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
