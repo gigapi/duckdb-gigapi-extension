@@ -8,7 +8,7 @@
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/make_uniq.hpp"
+#include "duckdb/common/helper.hpp"
 
 namespace duckdb {
 
