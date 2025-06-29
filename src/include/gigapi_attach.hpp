@@ -16,8 +16,7 @@ public:
     optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const EntryLookupInfo &lookup_info) override;
 };
 
-// Storage extension must be in the global namespace for DuckDB to find it
-class GigapiStorageExtension : public duckdb::StorageExtension {
+class GigapiStorageExtension : public StorageExtension {
 public:
     std::unique_ptr<duckdb::Catalog> Attach(
         duckdb::StorageExtensionInfo *storage_info,

@@ -14,8 +14,9 @@
 #include <string>
 #include <vector>
 
-// Implementation must be in the global namespace
-std::unique_ptr<duckdb::Catalog> GigapiStorageExtension::Attach(duckdb::StorageExtensionInfo *storage_info, duckdb::ClientContext &context, duckdb::AttachedDatabase &db, const std::string &name, duckdb::AttachInfo &info, duckdb::AccessMode access_mode) {
+namespace duckdb {
+
+std::unique_ptr<Catalog> GigapiStorageExtension::Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const std::string &name, AttachInfo &info, AccessMode access_mode) {
     // info.path = database name
     // name = attached schema
     std::string database_name = info.path;
@@ -24,29 +25,29 @@ std::unique_ptr<duckdb::Catalog> GigapiStorageExtension::Attach(duckdb::StorageE
     std::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
     auto schema_res = context.Query(create_schema_sql, false);
     if (schema_res->HasError()) {
-        throw duckdb::Exception(duckdb::ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
+        throw Exception(ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
     }
 
     // 2. Enumerate tables via gigapi('SHOW TABLES')
     auto show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
     auto result = context.Query(show_tables_query, false);
     if (!result || result->HasError()) {
-        throw duckdb::Exception(duckdb::ExceptionType::CATALOG, "Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
+        throw Exception(ExceptionType::CATALOG, "Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
     }
 
     // 3. For each table, create a view in the attached schema
     while (true) {
         auto chunk = result->Fetch();
         if (!chunk || chunk->size() == 0) break;
-        for (duckdb::idx_t i = 0; i < chunk->size(); ++i) {
+        for (idx_t i = 0; i < chunk->size(); ++i) {
             auto &vector = chunk->data[0];
-            if (!duckdb::FlatVector::Validity(vector).RowIsValid(i)) continue;
+            if (!FlatVector::Validity(vector).RowIsValid(i)) continue;
             std::string table_name = vector.GetValue(i).ToString();
             std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
                                    " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
             auto view_res = context.Query(view_sql, false);
             if (view_res->HasError()) {
-                throw duckdb::Exception(duckdb::ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
+                throw Exception(ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
             }
         }
     }
@@ -55,12 +56,10 @@ std::unique_ptr<duckdb::Catalog> GigapiStorageExtension::Attach(duckdb::StorageE
     return nullptr;
 }
 
-namespace duckdb {
-
 void RegisterGigapiAttach(DatabaseInstance &instance) {
     // Register the storage extension for TYPE gigapi
     auto &config = DBConfig::GetConfig(instance);
-    config.storage_extensions["gigapi"] = make_uniq<::GigapiStorageExtension>();
+    config.storage_extensions["gigapi"] = make_uniq<GigapiStorageExtension>();
 }
 
 } // namespace duckdb 
