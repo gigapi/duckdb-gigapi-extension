@@ -16,22 +16,21 @@ namespace duckdb {
 
 class GigapiStorageExtension : public StorageExtension {
 public:
-    unique_ptr<Catalog> Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const string &schema_name, AttachInfo &info, AccessMode access_mode) override {
+    unique_ptr<Catalog> Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const string &name, AttachInfo &info, AccessMode access_mode) override {
         // info.path = database name
-        // schema_name = attached schema
+        // name = attached schema
         std::string database_name = info.path;
 
-        // 1. Create the schema if it doesn't exist
-        auto &catalog = Catalog::GetSystemCatalog(context);
-        CreateSchemaInfo schema_info;
-        schema_info.schema = schema_name;
-        schema_info.if_not_exists = true;
-        catalog.CreateSchema(context, schema_info);
+        // 1. Create the schema if it doesn't exist (use SQL for IF NOT EXISTS)
+        std::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
+        auto schema_res = context.Query(create_schema_sql);
+        if (schema_res->HasError()) {
+            throw Exception(ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
+        }
 
         // 2. Enumerate tables via gigapi('SHOW TABLES')
-        Connection con(context.db);
-        std::string show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
-        auto result = con.Query(show_tables_query);
+        auto show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
+        auto result = context.Query(show_tables_query);
         if (!result || result->HasError()) {
             throw Exception(ExceptionType::CATALOG, "Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
         }
@@ -41,14 +40,12 @@ public:
             auto table_name_val = result->GetValue(0, i);
             if (table_name_val.IsNull()) continue;
             std::string table_name = table_name_val.ToString();
-            auto view_info = make_uniq<CreateViewInfo>();
-            view_info->schema = schema_name;
-            view_info->view_name = table_name;
-            view_info->sql = "SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
-            view_info->aliases = {};
-            view_info->temporary = false;
-            view_info->if_not_exists = true;
-            catalog.CreateView(context, *view_info);
+            std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
+                                   " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
+            auto view_res = context.Query(view_sql);
+            if (view_res->HasError()) {
+                throw Exception(ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
+            }
         }
 
         // Return nullptr (no custom catalog needed, views are registered)
