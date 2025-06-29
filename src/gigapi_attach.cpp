@@ -9,6 +9,8 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
+#include "duckdb/common/types/vector.hpp"
+#include "duckdb/common/types/validity_mask.hpp"
 #include <string>
 #include <vector>
 
@@ -41,7 +43,7 @@ public:
             if (!chunk || chunk->size() == 0) break;
             for (idx_t i = 0; i < chunk->size(); ++i) {
                 auto &vector = chunk->data[0];
-                if (vector.IsNull(i)) continue;
+                if (!FlatVector::Validity(vector).RowIsValid(i)) continue;
                 std::string table_name = vector.GetValue(i).ToString();
                 std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
                                        " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
