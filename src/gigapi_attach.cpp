@@ -36,15 +36,19 @@ public:
         }
 
         // 3. For each table, create a view in the attached schema
-        for (size_t i = 0; i < result->RowCount(); ++i) {
-            auto table_name_val = result->GetValue(0, i);
-            if (table_name_val.IsNull()) continue;
-            std::string table_name = table_name_val.ToString();
-            std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
-                                   " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
-            auto view_res = context.Query(view_sql, false);
-            if (view_res->HasError()) {
-                throw Exception(ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
+        while (true) {
+            auto chunk = result->Fetch();
+            if (!chunk || chunk->size() == 0) break;
+            for (idx_t i = 0; i < chunk->size(); ++i) {
+                auto &vector = chunk->data[0];
+                if (vector.IsNull(i)) continue;
+                std::string table_name = vector.GetValue(i).ToString();
+                std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
+                                       " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
+                auto view_res = context.Query(view_sql, false);
+                if (view_res->HasError()) {
+                    throw Exception(ExceptionType::CATALOG, "Failed to create view: " + view_res->GetError());
+                }
             }
         }
 
