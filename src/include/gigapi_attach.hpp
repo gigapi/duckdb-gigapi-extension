@@ -19,7 +19,14 @@ public:
 // Storage extension must be in the global namespace for DuckDB to find it
 class GigapiStorageExtension : public duckdb::StorageExtension {
 public:
-    std::unique_ptr<duckdb::Catalog> Attach(duckdb::StorageExtensionInfo *storage_info, duckdb::ClientContext &context, duckdb::AttachedDatabase &db, const std::string &name, duckdb::AttachInfo &info, duckdb::AccessMode access_mode);
+    std::unique_ptr<duckdb::Catalog> Attach(
+        duckdb::StorageExtensionInfo *storage_info,
+        duckdb::ClientContext &context,
+        duckdb::AttachedDatabase &db,
+        const std::string &name,
+        duckdb::AttachInfo &info,
+        duckdb::AccessMode access_mode
+    );
 };
 
 void RegisterGigapiAttach(DatabaseInstance &instance);
