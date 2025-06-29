@@ -9,6 +9,11 @@
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/main/connection.hpp"
+#include "duckdb/parser/parsed_data/create_schema_info.hpp"
+#include "duckdb/parser/parsed_data/create_view_info.hpp"
+#include <string>
+#include <vector>
 
 namespace duckdb {
 
@@ -47,23 +52,41 @@ optional_ptr<CatalogEntry> GigapiSchema::LookupEntry(CatalogTransaction transact
 }
 
 // Handler for ATTACH ... (TYPE gigapi, ...)
-static void GigapiAttachHandler(ClientContext &context, const std::string &schema_name) {
+static void GigapiAttachHandler(ClientContext &context, const std::string &schema_name, const std::string &database_name) {
+    // 1. Create the schema if it doesn't exist
     auto &catalog = Catalog::GetSystemCatalog(context);
-    CreateSchemaInfo info;
-    info.schema = schema_name;
-    info.if_not_exists = true;
-    catalog.CreateSchema(context, info);
+    CreateSchemaInfo schema_info;
+    schema_info.schema = schema_name;
+    schema_info.if_not_exists = true;
+    catalog.CreateSchema(context, schema_info);
 
-    // Replace the schema with our custom schema
-    auto &db = DatabaseInstance::Get(context);
-    auto &schemas = db.GetCatalogSet(CatalogType::SCHEMA_ENTRY);
-    schemas.DropEntry(context, schema_name, false);
-    auto gigapi_schema = make_uniq<GigapiSchema>(catalog, info);
-    schemas.AddEntry(context, std::move(gigapi_schema));
+    // 2. Use a DuckDB connection to enumerate tables via gigapi('SHOW TABLES')
+    Connection con(context.db);
+    std::string show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
+    auto result = con.Query(show_tables_query);
+    if (!result || result->HasError()) {
+        throw Exception("Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
+    }
+
+    // 3. For each table, create a view in the attached schema
+    for (size_t i = 0; i < result->RowCount(); ++i) {
+        auto table_name_val = result->GetValue(0, i);
+        if (table_name_val.IsNull()) continue;
+        std::string table_name = table_name_val.ToString();
+        auto view_info = make_uniq<CreateViewInfo>();
+        view_info->schema = schema_name;
+        view_info->view_name = table_name;
+        view_info->sql = "SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
+        view_info->aliases = {};
+        view_info->temporary = false;
+        view_info->if_not_exists = true;
+        catalog.CreateView(context, *view_info);
+    }
 }
 
 void RegisterGigapiAttach(DatabaseInstance &instance) {
     // Register the attach handler for TYPE gigapi
+    // The handler must accept (ClientContext&, schema_name, database_name)
     ExtensionUtil::RegisterAttachHandler(instance, "gigapi", GigapiAttachHandler);
 }
 
