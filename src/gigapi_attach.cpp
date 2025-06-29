@@ -12,9 +12,15 @@ namespace duckdb {
 
 class GigapiStorageExtension;
 
-static std::unique_ptr<Catalog> GigapiAttachHandler(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const std::string &name, AttachInfo &info, AccessMode access_mode) {
-    std::string database_name = info.path;
-    std::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
+static duckdb::unique_ptr<duckdb::Catalog, std::default_delete<duckdb::Catalog>, true> GigapiAttachHandler(
+    StorageExtensionInfo *storage_info,
+    ClientContext &context,
+    AttachedDatabase &db,
+    const duckdb::string &name,
+    AttachInfo &info,
+    AccessMode access_mode) {
+    duckdb::string database_name = info.path;
+    duckdb::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
     auto schema_res = context.Query(create_schema_sql, false);
     if (schema_res->HasError()) {
         throw Exception(ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
@@ -30,8 +36,8 @@ static std::unique_ptr<Catalog> GigapiAttachHandler(StorageExtensionInfo *storag
         for (idx_t i = 0; i < chunk->size(); ++i) {
             auto &vector = chunk->data[0];
             if (!FlatVector::Validity(vector).RowIsValid(i)) continue;
-            std::string table_name = vector.GetValue(i).ToString();
-            std::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
+            duckdb::string table_name = vector.GetValue(i).ToString();
+            duckdb::string view_sql = "CREATE OR REPLACE VIEW " + name + "." + table_name +
                                    " AS SELECT * FROM gigapi('" + database_name + "." + table_name + "')";
             auto view_res = context.Query(view_sql, false);
             if (view_res->HasError()) {
