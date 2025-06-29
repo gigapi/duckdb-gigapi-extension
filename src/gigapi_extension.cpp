@@ -634,6 +634,10 @@ std::string GigapiExtension::Version() const {
 
 extern "C" {
 
+DUCKDB_EXTENSION_API void gigapi_storage_init(duckdb::DBConfig &config) {
+	config.storage_extensions["gigapi"] = duckdb::make_uniq<duckdb::GigapiStorageExtension>();
+}
+
 DUCKDB_EXTENSION_API void gigapi_init(duckdb::DatabaseInstance &db) {
 	duckdb::DuckDB db_wrapper(db);
 	db_wrapper.LoadExtension<duckdb::GigapiExtension>();
@@ -641,10 +645,6 @@ DUCKDB_EXTENSION_API void gigapi_init(duckdb::DatabaseInstance &db) {
 
 DUCKDB_EXTENSION_API const char *gigapi_version() {
 	return duckdb::DuckDB::LibraryVersion();
-}
-
-DUCKDB_EXTENSION_API void gigapi_storage_init(duckdb::DBConfig &config) {
-	config.storage_extensions["gigapi"] = duckdb::make_uniq<duckdb::GigapiStorageExtension>();
 }
 
 }
