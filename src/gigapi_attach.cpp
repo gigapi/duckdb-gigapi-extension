@@ -33,12 +33,17 @@ public:
     }
 };
 
-GigapiSchema::GigapiSchema(Catalog &catalog, const std::string &name)
-    : SchemaCatalogEntry(catalog, name) {}
+GigapiSchema::GigapiSchema(Catalog &catalog, CreateSchemaInfo &info)
+    : SchemaCatalogEntry(catalog, info) {}
 
-TableCatalogEntry *GigapiSchema::GetTable(ClientContext &context, const std::string &table_name) {
+optional_ptr<CatalogEntry> GigapiSchema::LookupEntry(CatalogTransaction transaction, const EntryLookupInfo &lookup_info) {
+    // Only handle table lookups
+    if (lookup_info.type != CatalogType::TABLE_ENTRY) {
+        return nullptr;
+    }
     // Always return a GigapiTableEntry for any table name
-    return new GigapiTableEntry(*catalog, *this, table_name);
+    auto entry = make_uniq<GigapiTableEntry>(*catalog, *this, lookup_info.name);
+    return entry.release();
 }
 
 // Handler for ATTACH ... (TYPE gigapi, ...)
@@ -53,7 +58,7 @@ static void GigapiAttachHandler(ClientContext &context, const std::string &schem
     auto &db = DatabaseInstance::Get(context);
     auto &schemas = db.GetCatalogSet(CatalogType::SCHEMA_ENTRY);
     schemas.DropEntry(context, schema_name, false);
-    auto gigapi_schema = make_uniq<GigapiSchema>(catalog, schema_name);
+    auto gigapi_schema = make_uniq<GigapiSchema>(catalog, info);
     schemas.AddEntry(context, std::move(gigapi_schema));
 }
 

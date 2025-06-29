@@ -7,9 +7,9 @@ namespace duckdb {
 
 class GigapiSchema : public SchemaCatalogEntry {
 public:
-    GigapiSchema(Catalog &catalog, const std::string &name);
+    GigapiSchema(Catalog &catalog, CreateSchemaInfo &info);
 
-    TableCatalogEntry *GetTable(ClientContext &context, const std::string &table_name) override;
+    optional_ptr<CatalogEntry> LookupEntry(CatalogTransaction transaction, const EntryLookupInfo &lookup_info) override;
 };
 
 void RegisterGigapiAttach(DatabaseInstance &instance);
