@@ -83,6 +83,30 @@ GIGAPI SELECT * FROM my_measurement WHERE time > now() - interval '1 hour';
 
 Behind the scenes, the extension performs the same steps as the `gigapi()` table function, rewriting the query to read from specific data files before execution. If a query is not prefixed with `GIGAPI`, it will be handled by DuckDB's default planner.
 
+## ATTACH Support for GigAPI
+
+The extension supports DuckDB's `ATTACH` statement, allowing you to create a virtual schema that pipes all table references through the GigAPI metadata engine. This enables seamless integration with tools and workflows that expect standard DuckDB schemas and tables.
+
+### Usage
+
+```sql
+-- Attach a GigAPI database as schema 'bq'
+ATTACH 'mydb' AS bq (TYPE gigapi, READ_ONLY);
+
+-- List all tables in the attached GigAPI schema
+SHOW TABLES;
+
+-- Query a table from the attached schema
+SELECT * FROM bq.example;
+```
+
+**How it works:**
+- Any table reference in the attached schema (e.g., `bq.example`) is transparently routed through the `gigapi()` table function.
+- You do not need to manually create views or enumerate tables; the extension handles all resolution dynamically.
+- Metadata queries (e.g., `SHOW TABLES`, `DESCRIBE`, etc.) are also supported and routed through GigAPI.
+
+This makes it easy to use GigAPI-backed data as if it were a native DuckDB database.
+
 ## Developer Information
 
 ### Dry Run Function

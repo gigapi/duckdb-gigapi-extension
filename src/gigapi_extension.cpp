@@ -38,6 +38,7 @@
 #include "duckdb/catalog/catalog_transaction.hpp"
 #include "duckdb/common/pair.hpp"
 
+#include "include/gigapi_attach.hpp"
 
 namespace duckdb {
 
@@ -610,6 +611,8 @@ static void LoadInternal(DatabaseInstance &instance) {
 
 	auto giga_test_create_empty_index_scalar = ScalarFunction("giga_test_create_empty_index", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, GigapiTestCreateEmptyIndexFunction);
 	ExtensionUtil::RegisterFunction(instance, giga_test_create_empty_index_scalar);
+
+	RegisterGigapiAttach(instance);
 }
 
 void GigapiExtension::Load(DuckDB &db) {
