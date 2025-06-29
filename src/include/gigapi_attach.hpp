@@ -18,14 +18,7 @@ public:
 
 class GigapiStorageExtension : public StorageExtension {
 public:
-    std::unique_ptr<duckdb::Catalog> Attach(
-        duckdb::StorageExtensionInfo *storage_info,
-        duckdb::ClientContext &context,
-        duckdb::AttachedDatabase &db,
-        const std::string &name,
-        duckdb::AttachInfo &info,
-        duckdb::AccessMode access_mode
-    );
+    GigapiStorageExtension();
 };
 
 void RegisterGigapiAttach(DatabaseInstance &instance);

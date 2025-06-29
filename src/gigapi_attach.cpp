@@ -2,40 +2,28 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/main/connection.hpp"
-#include "duckdb/parser/parsed_data/create_schema_info.hpp"
-#include "duckdb/parser/parsed_data/create_view_info.hpp"
-#include "duckdb/main/extension_util.hpp"
+#include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/storage_extension.hpp"
-#include "duckdb/parser/parsed_data/attach_info.hpp"
-#include "duckdb/common/types/vector.hpp"
-#include "duckdb/common/types/validity_mask.hpp"
 #include <string>
-#include <vector>
 
 namespace duckdb {
 
-std::unique_ptr<Catalog> GigapiStorageExtension::Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const std::string &name, AttachInfo &info, AccessMode access_mode) {
-    // info.path = database name
-    // name = attached schema
-    std::string database_name = info.path;
+class GigapiStorageExtension;
 
-    // 1. Create the schema if it doesn't exist (use SQL for IF NOT EXISTS)
+static std::unique_ptr<Catalog> GigapiAttachHandler(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db, const std::string &name, AttachInfo &info, AccessMode access_mode) {
+    std::string database_name = info.path;
     std::string create_schema_sql = "CREATE SCHEMA IF NOT EXISTS " + name;
     auto schema_res = context.Query(create_schema_sql, false);
     if (schema_res->HasError()) {
         throw Exception(ExceptionType::CATALOG, "Failed to create schema: " + schema_res->GetError());
     }
-
-    // 2. Enumerate tables via gigapi('SHOW TABLES')
     auto show_tables_query = "SELECT * FROM gigapi('SHOW TABLES')";
     auto result = context.Query(show_tables_query, false);
     if (!result || result->HasError()) {
         throw Exception(ExceptionType::CATALOG, "Failed to enumerate tables from GigAPI: " + (result ? result->GetError() : "unknown error"));
     }
-
-    // 3. For each table, create a view in the attached schema
     while (true) {
         auto chunk = result->Fetch();
         if (!chunk || chunk->size() == 0) break;
@@ -51,13 +39,14 @@ std::unique_ptr<Catalog> GigapiStorageExtension::Attach(StorageExtensionInfo *st
             }
         }
     }
-
-    // Return nullptr (no custom catalog needed, views are registered)
     return nullptr;
 }
 
+GigapiStorageExtension::GigapiStorageExtension() {
+    this->attach = GigapiAttachHandler;
+}
+
 void RegisterGigapiAttach(DatabaseInstance &instance) {
-    // Register the storage extension for TYPE gigapi
     auto &config = DBConfig::GetConfig(instance);
     config.storage_extensions["gigapi"] = make_uniq<GigapiStorageExtension>();
 }
