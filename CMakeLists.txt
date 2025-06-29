@@ -21,6 +21,7 @@ set(GIGAPI_EXTENSION_SOURCES
   src/gigapi_extension.cpp
   src/gigapi_secret.cpp
   src/parse_where.cpp
+  src/gigapi_attach.cpp
 )
 
 build_static_extension(${TARGET_NAME} ${GIGAPI_EXTENSION_SOURCES})
