@@ -642,6 +642,11 @@ DUCKDB_EXTENSION_API void gigapi_init(duckdb::DatabaseInstance &db) {
 DUCKDB_EXTENSION_API const char *gigapi_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
+
+DUCKDB_EXTENSION_API void gigapi_storage_init(duckdb::DBConfig &config) {
+	config.storage_extensions["gigapi"] = duckdb::make_uniq<duckdb::GigapiStorageExtension>();
+}
+
 }
 
 #ifndef DUCKDB_EXTENSION_MAIN
